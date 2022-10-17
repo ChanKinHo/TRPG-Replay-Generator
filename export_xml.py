@@ -1,6 +1,12 @@
 #!/usr/bin/env python
 # coding: utf-8
-edtion = 'version 1.0.4'
+from Utils import EDITION
+
+# 异常定义
+
+from Exceptions import RplGenError, Print
+from Exceptions import ArgumentError, DecodeError, MediaError, SyntaxsError
+from Exceptions import PrxmlPrint, WarningPrint
 
 # 外部参数输入
 
@@ -18,7 +24,9 @@ ap.add_argument("-F", "--FramePerSecond", help='Set the FPS of display, default 
 ap.add_argument("-W", "--Width", help='Set the resolution of display, default is 1920, larger than this may cause lag.',type=int,default=1920)
 ap.add_argument("-H", "--Height", help='Set the resolution of display, default is 1080, larger than this may cause lag.',type=int,default=1080)
 ap.add_argument("-Z", "--Zorder", help='Set the display order of layers, not recommended to change the values unless necessary!',type=str,
-                default='BG3,BG2,BG1,Am3,Am2,Am1,Bb')
+                default='BG2,BG1,Am3,Am2,Am1,AmS,Bb,BbS')
+# 语言
+ap.add_argument("--Language",help='Choose the language of running log',default='en',type=str)
 args = ap.parse_args()
 
 media_obj = args.MediaObjDefine #媒体对象定义文件的路径
@@ -30,12 +38,22 @@ screen_size = (args.Width,args.Height) #显示的分辨率
 frame_rate = args.FramePerSecond #帧率 单位fps
 zorder = args.Zorder.split(',') #渲染图层顺序
 
+# 初始化日志打印
+if args.Language == 'zh':
+    # 中文
+    Print.lang = 1 
+    RplGenError.lang = 1
+else:
+    # 英文
+    Print.lang == 0
+    RplGenError.lang = 0
+
 try:
     for path in [stdin_log,media_obj]:
         if path is None:
-            raise OSError("[31m[ArgumentError]:[0m Missing principal input argument!")
+            raise ArgumentError('MissInput')
         if os.path.isfile(path) == False:
-            raise OSError("[31m[ArgumentError]:[0m Cannot find file "+path)
+            raise ArgumentError('FileNotFound',path)
 
     if output_path is None:
         pass 
@@ -43,19 +61,19 @@ try:
         try:
             os.makedirs(output_path)
         except Exception:
-            raise OSError("[31m[SystemError]:[0m Cannot make directory "+output_path)
+            raise ArgumentError('MkdirErr',output_path)
     output_path = output_path.replace('\\','/')
 
     # FPS
     if frame_rate <= 0:
-        raise ValueError("[31m[ArgumentError]:[0m "+str(frame_rate))
+        raise ArgumentError('FrameRate',str(frame_rate))
     elif frame_rate>30:
-        print("[33m[warning]:[0m",'FPS is set to '+str(frame_rate)+', which may cause lag in the display!')
+        print(WarningPrint('HighFPS',str(frame_rate))) 
 
     if (screen_size[0]<=0) | (screen_size[1]<=0):
-        raise ValueError("[31m[ArgumentError]:[0m "+str(screen_size))
+        raise ArgumentError('Resolution',str(screen_size))
     if screen_size[0]*screen_size[1] > 3e6:
-        print("[33m[warning]:[0m",'Resolution is set to more than 3M, which may cause lag in the display!')
+        print(WarningPrint('HighRes')) 
 except Exception as E:
     print(E)
     sys.exit(1)
@@ -68,6 +86,9 @@ from PIL import Image,ImageFont,ImageDraw
 import re
 from pygame import mixer
 import glob # 匹配路径
+import pickle
+
+from FreePos import Pos,FreePos,PosGrid
 
 # 文字对象
 
@@ -121,32 +142,40 @@ class StrokeText(Text):
 
     # 对话框、气泡、文本框
 class Bubble:
-    def __init__(self,filepath=None,Main_Text=Text(),Header_Text=None,pos=(0,0),mt_pos=(0,0),ht_pos=(0,0),align='left',line_distance=1.5,label_color='Lavender'):
+    def __init__(self,filepath=None,Main_Text=Text(),Header_Text=None,pos=(0,0),mt_pos=(0,0),ht_pos=(0,0),ht_target='Name',align='left',line_distance=1.5,label_color='Lavender'):
         global file_index
         # 支持气泡图缺省
-        if filepath is None:
+        if filepath is None or filepath == 'None':
             self.path = None
+            self.media = None
             self.size = screen_size
             self.filename = None
         else:
             self.path = reformat_path(filepath)
-            self.size = Image.open(filepath).size
+            self.media = Image.open(filepath).convert('RGBA')
+            self.size = self.media.size
             self.filename = self.path.split('/')[-1]
+        # pos
+        if type(pos) in [Pos,FreePos]:
+            self.pos = pos
+        else:
+            self.pos = Pos(*pos)
+        # Text
         self.MainText = Main_Text
         self.mt_pos = mt_pos
         self.Header = Header_Text
         self.ht_pos = ht_pos
-        self.pos = pos
+        self.target = ht_target
         self.line_distance = line_distance
-        self.fileindex = 'BBfile_' + '%d'% file_index
-        self.PRpos = PR_center_arg(np.array(self.size),np.array(self.pos))
         self.align = align
+        # clip
+        self.fileindex = 'BBfile_' + '%d'% file_index
         self.label_color = label_color
         file_index = file_index+1
-    def display(self,begin,end,text,header=''): # 这段代码是完全没有可读性的屎，但是确实可运行，非必要不要改
-        global outtext_index,clip_tplt,clip_index
+    # return a canvas
+    def draw(self, text, header=''):
         # 生成文本图片
-        ofile = output_path+'/auto_TX_%d'%outtext_index+'.png'
+        # ofile = output_path+'/auto_TX_%d'%outtext_index+'.png'
         canvas = Image.new(mode='RGBA',size=self.size,color=(0,0,0,0))
         if (self.Header!=None) & (header!=''):    # Header 有定义，且输入文本不为空
             ht_text = self.Header.draw(header)[0]
@@ -170,7 +199,18 @@ class Bubble:
                               int(y+i*self.MainText.size*self.line_distance+p2)
                              )
                             )
-        canvas.save(ofile)
+        # canvas.save(ofile)
+        return canvas
+    def display(self,begin,end,text,header='',center='NA'): # 这段代码是完全没有可读性的屎，但是确实可运行，非必要不要改
+        global outtext_index,clip_tplt,clip_index
+        if center == 'NA':
+            self.PRpos = PR_center_arg(np.array(self.size),np.array(self.pos.get()))
+        else:
+            self.PRpos = PR_center_arg(np.array(self.size),np.array(Pos(*eval(center)).get()))
+        
+        ofile = output_path+'/auto_TX_%d'%outtext_index+'.png'
+        canvas_draw = self.draw(text,header)
+        canvas_draw.save(ofile)
         
         # 生成序列
         width,height = self.size
@@ -218,26 +258,398 @@ class Bubble:
     def convert(self):
         pass
 
+class Balloon(Bubble):
+    def __init__(self,filepath=None,Main_Text=Text(),Header_Text=[None],pos=(0,0),mt_pos=(0,0),ht_pos=[(0,0)],ht_target=['Name'],align='left',line_distance=1.5,label_color='Lavender'):
+        super().__init__(filepath=filepath,Main_Text=Main_Text,Header_Text=Header_Text,pos=pos,mt_pos=mt_pos,ht_pos=ht_pos,ht_target=ht_target,align=align,line_distance=line_distance,label_color=label_color)
+        if len(self.Header)!=len(self.ht_pos) or len(self.Header)!=len(self.target):
+            raise MediaError('BnHead')
+        else:
+            self.header_num = len(self.Header)
+    def draw(self, text, header=''):
+        # 生成文本图片 # 同Bubble类
+        canvas = Image.new(mode='RGBA',size=self.size,color=(0,0,0,0))
+        # 生成头文本
+        header_texts = header.split('|')
+        for i,header_text_this in enumerate(header_texts):
+            # Header 不为None ，且输入文本不为空
+            if (self.Header[i]!=None) & (header_text_this!=''):
+                ht_text = self.Header[i].draw(header_text_this)[0]
+                try:
+                    p1,p2,p3,p4 = ht_text.getbbox()
+                    canvas.paste(ht_text.crop((p1,p2,p3,p4)),(self.ht_pos[i][0]+p1,self.ht_pos[i][1]+p2)) # 兼容微软雅黑这种，bbox到处飘的字体
+                except TypeError:
+                    pass
+            if i == self.header_num -1:
+                break
+        # 生成主文本 # 同Bubble类
+        x,y = self.mt_pos
+        for i,mt_text in enumerate(self.MainText.draw(text)):
+            try:
+                p1,p2,p3,p4 = mt_text.getbbox() # 先按照bboxcrop，然后按照原位置放置
+            except TypeError: # 如果遇到了空图导致的TypeError，直接跳过这一循环，走到下一行
+                continue
+            if self.align == 'left':
+                canvas.paste(mt_text.crop((p1,p2,p3,p4)),(x+p1,int(y+i*self.MainText.size*self.line_distance+p2)))
+            else: # alpha 1.7.0 兼容居中
+                word_w = p3 - p1
+                canvas.paste(mt_text.crop((p1,p2,p3,p4)),
+                             (x + (self.MainText.size*self.MainText.line_limit - word_w)//2,
+                              int(y+i*self.MainText.size*self.line_distance+p2)
+                             )
+                            )
+        return canvas
+
+class DynamicBubble(Bubble):
+    def __init__(self,filepath=None,Main_Text=Text(),Header_Text=None,pos=(0,0),mt_pos=(0,0),mt_end=(0,0),ht_pos=(0,0),ht_target='Name',fill_mode='stretch',line_distance=1.5,label_color='Lavender'):
+        super().__init__(filepath=filepath,Main_Text=Main_Text,Header_Text=Header_Text,pos=pos,mt_pos=mt_pos,ht_pos=ht_pos,ht_target=ht_target,line_distance=line_distance,label_color=label_color)
+        if (mt_pos[0] >= mt_end[0]) | (mt_pos[1] >= mt_end[1]) | (mt_end[0] > self.size[0]) | (mt_end[1] > self.size[1]):
+            raise MediaError('InvSep','mt_end')
+        elif (mt_pos[0] < 0) | (mt_pos[1] < 0):
+            raise MediaError('InvSep','mt_pos')
+        else:
+            self.mt_end = mt_end
+        # fill_mode 只能是 stretch 或者 collage
+        if fill_mode in ['stretch','collage']:
+            self.fill_mode = fill_mode
+        else:
+            raise MediaError('InvFill', fill_mode)
+        # x,y轴上的四条分割线
+        self.x_tick = [0,self.mt_pos[0],self.mt_end[0],self.size[0]]
+        self.y_tick = [0,self.mt_pos[1],self.mt_end[1],self.size[1]]
+        self.bubble_clip = []
+        # 0 3 6
+        # 1 4 7
+        # 2 5 8
+        for i in range(0,3):
+            for j in range(0,3):
+                try:
+                    # crop(left, upper, right, lower)
+                    self.bubble_clip.append(self.media.crop((self.x_tick[i],self.y_tick[j],
+                                                             self.x_tick[i+1],self.y_tick[j+1]
+                                                            )))
+                except Exception:
+                    # 无效的clip
+                    self.bubble_clip.append(None)
+        self.bubble_clip_size = list(map(lambda x:(0,0) if x is None else x.size, self.bubble_clip))
+
+    def draw(self, text, header = ''):
+        # 首先，需要把主文本渲染出来
+        main_text_list = self.MainText.draw(text)
+        # 第一次循环：获取最大的x和最大的y
+        # 导出PR项目的特殊性：如果是一个空白文本，那么getbbox将不能得到理论尺寸。
+        # 因此xlim和ylim的初始值被设为半个字的大小。
+        xlim = int(self.MainText.size/2)
+        ylim = self.MainText.size
+        for i,mt_text in enumerate(main_text_list):
+            try:
+                p1,p2,p3,p4 = mt_text.getbbox() # 先按照bboxcrop，然后按照原位置放置
+            except TypeError: # 如果遇到了空图导致的TypeError，直接跳过这一循环，走到下一行
+                continue
+            # 因为考虑到有的字体的bbox不对劲，因此不减去p1,p2，以p3，p4为准
+            x_this = p3
+            y_this = p4
+            y_this = i*self.MainText.size*self.line_distance + y_this
+            if x_this > xlim:
+                xlim = int(x_this)
+            ylim = int(y_this)
+        # 建立变形后的气泡
+        temp_size_x = xlim + self.x_tick[1] + self.x_tick[3] - self.x_tick[2]
+        temp_size_y = ylim + self.y_tick[1] + self.y_tick[3] - self.y_tick[2]
+        bubble_canvas = Image.new(mode='RGBA',size=(temp_size_x,temp_size_y),color=(0,0,0,0))
+        text_canvas = Image.new(mode='RGBA',size=(temp_size_x,temp_size_y),color=(0,0,0,0))
+        # 生成文本图片
+        # 头文本
+        if (self.Header!=None) & (header!=''):    # Header 有定义，且输入文本不为空
+            if self.ht_pos[0] > self.x_tick[2]:
+                ht_renderpos_x = self.ht_pos[0] - self.x_tick[2] + self.x_tick[1] + xlim
+            else:
+                ht_renderpos_x = self.ht_pos[0]
+            if self.ht_pos[1] > self.y_tick[2]:
+                ht_renderpos_y = self.ht_pos[1] - self.y_tick[2] + self.y_tick[1] + ylim
+            else:
+                ht_renderpos_y = self.ht_pos[1]
+            ht_text = self.Header.draw(header)[0]
+            try:
+                p1,p2,p3,p4 = ht_text.getbbox() # 如果是空图的话，getbbox返回None，会发生TypeError
+                text_canvas.paste(ht_text.crop((p1,p2,p3,p4)),(ht_renderpos_x+p1,ht_renderpos_y+p2)) # 兼容微软雅黑这种，bbox到处飘的字体
+            except TypeError:
+                pass
+        # 主文本
+        for i,mt_text in enumerate(main_text_list):
+            try:
+                p1,p2,p3,p4 = mt_text.getbbox() # 先按照bboxcrop，然后按照原位置放置
+            except TypeError: # 如果遇到了空图导致的TypeError，直接跳过这一循环，走到下一行
+                continue
+            text_canvas.paste(mt_text.crop((p1,p2,p3,p4)),(self.x_tick[1]+p1,int(self.y_tick[1]+i*self.MainText.size*self.line_distance+p2)))
+
+        # return ofile
+        # 气泡碎片的渲染位置
+        bubble_clip_pos = {
+            0:(0,0),
+            1:(0,self.y_tick[1]),
+            2:(0,self.y_tick[1]+ylim),
+            3:(self.x_tick[1],0),
+            4:(self.x_tick[1],self.y_tick[1]),
+            5:(self.x_tick[1],self.y_tick[1]+ylim),
+            6:(self.x_tick[1]+xlim,0),
+            7:(self.x_tick[1]+xlim,self.y_tick[1]),
+            8:(self.x_tick[1]+xlim,self.y_tick[1]+ylim)
+        }
+        # 气泡碎片的目标大小
+        bubble_clip_scale = {
+            0:False,
+            1:(self.x_tick[1],ylim),
+            2:False,
+            3:(xlim,self.y_tick[1]),
+            4:(xlim,ylim),
+            5:(xlim,self.y_tick[3]-self.y_tick[2]),
+            6:False,
+            7:(self.x_tick[3]-self.x_tick[2],ylim),
+            8:False
+        }
+        for i in range(0,9):
+            if 0 in self.bubble_clip_size[i]:
+                continue
+            else:
+                if bubble_clip_scale[i] == False:
+                    bubble_canvas.paste(self.bubble_clip[i],bubble_clip_pos[i])
+                else:
+                    if self.fill_mode == 'stretch':
+                        bubble_canvas.paste(self.bubble_clip[i].resize(bubble_clip_scale[i]),bubble_clip_pos[i])
+                    elif self.fill_mode == 'collage':
+                        # 新建拼贴图层，尺寸为气泡碎片的目标大小
+                        collage_canvas = Image.new(mode='RGBA',size=bubble_clip_scale[i],color=(0,0,0,0))
+                        col_x,col_y = (0,0)
+                        while col_y < bubble_clip_scale[i][1]:
+                            col_x = 0
+                            while col_x < bubble_clip_scale[i][0]:
+                                collage_canvas.paste(self.bubble_clip[i],(col_x,col_y))
+                                col_x = col_x + self.bubble_clip_size[i][0]
+                            col_y = col_y + self.bubble_clip_size[i][1]
+                        bubble_canvas.paste(collage_canvas,bubble_clip_pos[i])
+        # 如果气泡图是空的，则返回空
+        if bubble_canvas.getbbox() is None:
+            return None,text_canvas
+        # 无论文本图是不是空的，均正常保存为文件。
+        else:
+            return bubble_canvas,text_canvas
+    def display(self,begin,end,text,header='',center='NA'): # 这段代码是完全没有可读性的屎，但是确实可运行，非必要不要改
+        global outtext_index,clip_tplt,clip_index
+        # 先生成文件
+        bubble_ofile = output_path+'/auto_BB_%d'%outtext_index+'.png'
+        text_ofile = output_path+'/auto_TX_%d'%outtext_index+'.png'
+
+        bubble_canvas,text_canvas = self.draw(text,header)
+        temp_size = text_canvas.size
+
+        # 保存文件
+        text_canvas.save(text_ofile)
+
+        # 获取动态气泡的参数
+        width,height = temp_size
+        # 获取PR位置参数
+        if center == 'NA':
+            self.PRpos = PR_center_arg(np.array(temp_size),np.array(self.pos.get()))
+        else:
+            self.PRpos = PR_center_arg(np.array(temp_size),np.array(Pos(*eval(center)).get()))
+        pr_horiz,pr_vert = self.PRpos
+        # 生成序列
+        if bubble_canvas is None:
+            clip_bubble = None
+            # print('Render empty Bubble!')
+        else:
+            # 先保存气泡图片
+            bubble_canvas.save(bubble_ofile)
+            clip_bubble = clip_tplt.format(**{'clipid':'BB_clip_%d'%clip_index,
+                                              'clipname':'auto_BB_%d.png'%outtext_index,
+                                              'timebase':'%d'%frame_rate,
+                                              'ntsc':Is_NTSC,
+                                              'start':'%d'%begin,
+                                              'end':'%d'%end,
+                                              'in':'%d'%90000,
+                                              'out':'%d'%(90000+end-begin),
+                                              'fileid':'auto_BB_%d'%outtext_index,
+                                              'filename':'auto_BB_%d.png'%outtext_index,
+                                              'filepath':reformat_path(bubble_ofile),
+                                              'filewidth':'%d'%width,
+                                              'fileheight':'%d'%height,
+                                              'horiz':'%.5f'%pr_horiz,
+                                              'vert':'%.5f'%pr_vert,
+                                              'colorlabel':self.label_color})
+        # tx的clip
+        clip_text = clip_tplt.format(**{'clipid':'TX_clip_%d'%clip_index,
+                                        'clipname':'auto_TX_%d.png'%outtext_index,
+                                        'timebase':'%d'%frame_rate,
+                                        'ntsc':Is_NTSC,
+                                        'start':'%d'%begin,
+                                        'end':'%d'%end,
+                                        'in':'%d'%90000,
+                                        'out':'%d'%(90000+end-begin),
+                                        'fileid':'auto_TX_%d'%outtext_index,
+                                        'filename':'auto_TX_%d.png'%outtext_index,
+                                        'filepath':reformat_path(text_ofile),
+                                        'filewidth':'%d'%width,
+                                        'fileheight':'%d'%height,
+                                        'horiz':'%.5f'%pr_horiz,
+                                        'vert':'%.5f'%pr_vert,
+                                        'colorlabel':self.MainText.label_color})
+        outtext_index = outtext_index + 1
+        clip_index = clip_index+1
+        return (clip_bubble,clip_text)
+
+class ChatWindow(Bubble):
+    def __init__(self,filepath=None,sub_key=['Key1'],sub_Bubble=[Bubble()],sub_Anime=[],sub_align=['left'],pos=(0,0),sub_pos=(0,0),sub_end=(0,0),am_left=0,am_right=0,sub_distance=50,label_color='Lavender'):
+        global file_index
+        if len(sub_Bubble) != len(sub_key):
+            raise MediaError('CWKeyLen')
+        # 空白底图
+        if filepath is None or filepath == 'None':
+            self.path = None
+            self.media = None
+            self.size = screen_size
+            self.filename = None
+        else:
+            self.path = reformat_path(filepath)
+            self.media = Image.open(filepath).convert('RGBA')
+            self.size = self.media.size
+            self.filename = self.path.split('/')[-1]
+        # 位置
+        if type(pos) in [Pos,FreePos]:
+            self.pos = pos
+        else:
+            self.pos = Pos(*pos)
+        # 子气泡和对齐
+        self.sub_Bubble = {}
+        self.sub_Anime = {}
+        self.sub_align = {}
+        for i,key in enumerate(sub_key):
+            # 检查气泡是否是 Ballon
+            if type(sub_Bubble[i]) is Balloon:
+                raise MediaError('Bn2CW', key)
+            self.sub_Bubble[key] = sub_Bubble[i]
+            # 载入对齐，默认是左对齐
+            try:
+                if sub_align[i] in ['left','right']:
+                    self.sub_align[key] = sub_align[i]
+                else:
+                    raise MediaError('BadAlign',sub_align[i])
+            except IndexError:
+                self.sub_align[key] = 'left'
+            # 载入子立绘，默认是None
+            try:
+                self.sub_Anime[key] = sub_Anime[i]
+            except IndexError:
+                self.sub_Anime[key] = None
+        # 子气泡尺寸
+        if (sub_pos[0] >= sub_end[0]) | (sub_pos[1] >= sub_end[1]):
+            raise MediaError('InvSep','sub_end')
+        else:
+            self.sub_size = (sub_end[0]-sub_pos[0],sub_end[1]-sub_pos[1])
+            self.sub_pos = sub_pos
+        # 立绘对齐位置
+        if am_left >= am_right:
+            raise MediaError('InvSep', 'am_right')
+        else:
+            self.am_left = am_left
+            self.am_right = am_right
+        # 子气泡间隔
+        self.sub_distance = sub_distance
+        # 留存文本容器-这边应该用不到：
+        self.main_text = ''
+        self.header_text = ''
+        # 其他气泡类clip的必要参数
+        self.fileindex = 'BBfile_' + '%d'% file_index
+        self.label_color = label_color
+        # 这个MainText只是用来给labelcolor做参考用的。
+        self.MainText = self.sub_Bubble[sub_key[0]].MainText
+        file_index = file_index+1
+
+    # 渲染气泡中的文本，对于CW来说，包括子气泡的窗体和PC头像都在这里生成。
+    def draw(self, text, header=''):
+        # 生成文本图片
+        ofile = output_path+'/auto_TX_%d'%outtext_index+'.png'
+        # 主容器，容纳整个文本图
+        canvas = Image.new(mode='RGBA',size=self.size,color=(0,0,0,0))
+        # 子气泡容器，容纳若干个子气泡及其文本
+        sub_canvas = Image.new(mode='RGBA',size=self.sub_size,color=(0,0,0,0))
+        # 立绘容器，容纳若干个立绘
+        am_canvas = Image.new(mode='RGBA',size=(self.am_right-self.am_left,self.sub_size[1]),color=(0,0,0,0))
+        # 拆分主文本和头文本
+        main_text_list = text.split('|')
+        header_text_list = header.split('|')
+        header_main_pair = []
+        for i,main_text in enumerate(main_text_list):
+            header_main_pair.append((header_text_list[i],main_text))
+        # 将头主文本对列表倒序
+        header_main_pair = header_main_pair[::-1]
+        # 第二次循环：渲染子气泡
+        y_bottom = self.sub_size[1] # 当前句子的可用y底部
+        for header_main in header_main_pair:
+            # 解析(键#头文本,主文本)
+            bubble_header_this,main_this = header_main
+            key_this,header_this = bubble_header_this.split('#')
+            # 绘制子气泡
+            if type(self.sub_Bubble[key_this]) is DynamicBubble:
+                bubble_canvas,text_canvas = self.sub_Bubble[key_this].draw(main_this,header_this)
+            else:
+                text_canvas = self.sub_Bubble[key_this].draw(main_this,header_this)
+                bubble_canvas = self.sub_Bubble[key_this].media
+            if bubble_canvas is not None:
+                bubble_canvas.paste(text_canvas,(0,0),mask=text_canvas)
+                subbubble_canvas = bubble_canvas
+            else:
+                subbubble_canvas = text_canvas
+            subbubble_size = subbubble_canvas.size
+            if self.sub_align[key_this] == 'left':
+                sub_canvas.paste(subbubble_canvas,(0,y_bottom-subbubble_size[1]))
+                if self.sub_Anime[key_this] is not None:
+                    am_canvas.paste(self.sub_Anime[key_this].media,(0,y_bottom-subbubble_size[1]))
+            else:
+                sub_canvas.paste(subbubble_canvas,(self.sub_size[0]-subbubble_size[0],y_bottom-subbubble_size[1]))
+                if self.sub_Anime[key_this] is not None:
+                    am_canvas.paste(self.sub_Anime[key_this].media,(self.am_right-self.am_left-self.sub_Anime[key_this].size[0],y_bottom-subbubble_size[1]))
+            # 更新可用底部 = 前一次底部 - 子气泡高度 - 子气泡间距
+            y_bottom = y_bottom - subbubble_size[1] - self.sub_distance
+            # 如果可用底部已经达到顶部之外
+            if y_bottom < 0:
+                break            
+        # 将子气泡容器渲染到母气泡容器
+        canvas.paste(sub_canvas,self.sub_pos)
+        canvas.paste(am_canvas,(self.am_left,self.sub_pos[1]),mask=am_canvas)
+        return canvas
+
 # 背景图片
 class Background:
     def __init__(self,filepath,pos = (0,0),label_color='Lavender'):
         global file_index 
-        if filepath in cmap.keys(): #对纯色定义的背景的支持
+        # 对纯色定义的背景的支持
+        if filepath in cmap.keys():
+            # 新建图像，并保存
             ofile = output_path+'/auto_BG_'+filepath+'.png'
-            Image.new(mode='RGBA',size=screen_size,color=cmap[filepath]).save(ofile)
+            self.media = Image.new(mode='RGBA',size=screen_size,color=cmap[filepath])
+            self.media.save(ofile)
+            # 路径和尺寸
             self.path = reformat_path(ofile)
             self.size = screen_size
         else:
             self.path = reformat_path(filepath)
-            self.size = Image.open(filepath).size
-        self.pos = pos
-        self.PRpos = PR_center_arg(np.array(self.size),np.array(self.pos))
+            self.media = Image.open(filepath).convert('RGBA')
+            self.size = self.media.size
+        if type(pos) in [Pos,FreePos]:
+            self.pos = pos
+        else:
+            self.pos = Pos(*pos)
+        # self.PRpos = PR_center_arg(np.array(self.size),np.array(self.pos.get()))
         self.filename = self.path.split('/')[-1]
         self.fileindex = 'BGfile_%d'% file_index
         self.label_color = label_color
         file_index = file_index+1
-    def display(self,begin,end):
+    def display(self,begin,end,center='NA'):
         global clip_tplt,clip_index
+        if center == 'NA':
+            self.PRpos = PR_center_arg(np.array(self.size),np.array(self.pos.get()))
+        else:
+            self.PRpos = PR_center_arg(np.array(self.size),np.array(Pos(*eval(center)).get()))
         width,height = self.size
         pr_horiz,pr_vert = self.PRpos
         clip_this = clip_tplt.format(**{'clipid':'BG_clip_%d'%clip_index,
@@ -266,15 +678,23 @@ class Animation:
     def __init__(self,filepath,pos = (0,0),tick=1,loop=True,label_color='Lavender'):
         global file_index 
         self.path = reformat_path(glob.glob(filepath)[0]) # 兼容动画Animation，只使用第一帧！
-        self.pos = pos
-        self.size = Image.open(glob.glob(filepath)[0].replace('\\','/')).size # 兼容动画
+        self.media = Image.open(glob.glob(filepath)[0].replace('\\','/')).convert('RGBA')
+        self.size = self.media.size
         self.filename = self.path.split('/')[-1]
+        if type(pos) in [Pos,FreePos]:
+            self.pos = pos
+        else:
+            self.pos = Pos(*pos)
         self.fileindex = 'AMfile_%d'% file_index
-        self.PRpos = PR_center_arg(np.array(self.size),np.array(self.pos))
+        # self.PRpos = PR_center_arg(np.array(self.size),np.array(self.pos.get()))
         self.label_color = label_color
         file_index = file_index+1
-    def display(self,begin,end):
+    def display(self,begin,end,center='NA'):
         global clip_tplt,clip_index
+        if center == 'NA':
+            self.PRpos = PR_center_arg(np.array(self.size),np.array(self.pos.get()))
+        else:
+            self.PRpos = PR_center_arg(np.array(self.size),np.array(Pos(*eval(center)).get()))
         width,height = self.size
         pr_horiz,pr_vert = self.PRpos
         clip_this = clip_tplt.format(**{'clipid':'AM_clip_%d'%clip_index,
@@ -298,6 +718,47 @@ class Animation:
     def convert(self):
         pass
 
+# a 1.13.5 组合立绘，Animation类的子类，组合立绘只能是静态立绘！
+class GroupedAnimation(Animation):
+    def __init__(self,subanimation_list,subanimation_current_pos=None,label_color='Mango'):
+        global file_index,outanime_index
+        ofile = output_path+'/auto_GA_%d'%outanime_index+'.png'
+        canvas = Image.new(size=screen_size,mode='RGBA',color=(0,0,0,0))
+        # 如果外部未指定位置参数，则使用子Animation类的自身的pos
+        if subanimation_current_pos is None:
+            subanimation_current_pos = [None]*len(subanimation_list)
+        # 如果指定的位置参数和子Animation的数量不一致，报出报错
+        elif len(subanimation_current_pos) != len(subanimation_list):
+            raise MediaError('GAPrame')
+        # 开始在画板上绘制立绘
+        else:
+            # 越后面的位于越上层的图层
+            # [zhang,drink_left] [(0,0),(0,0)] # list of Animation/str | list of tuple/str
+            for am_name,am_pos in zip(subanimation_list,subanimation_current_pos):
+                # 判断AM
+                try:
+                    if type(am_name) in [Animation,BuiltInAnimation,GroupedAnimation]:
+                        subanimation = am_name
+                    else: # type(am_name) is str
+                        subanimation = eval(am_name)
+                except NameError as E:
+                    raise MediaError('Undef2GA', am_name )
+                if am_pos is None:
+                    # 打开 subanimation 的图片对象，将其按照self.pos, paste到canvas
+                    canvas.paste(subanimation.media,subanimation.pos.get(),mask=subanimation.media)
+                else:
+                    # 打开 subanimation 的图片对象，将其按照am_pos, paste到canvas
+                    canvas.paste(subanimation.media,am_pos,mask=subanimation.media)
+        # 保存文件
+        canvas.save(ofile)
+        self.pos = Pos(0,0)
+        self.path = reformat_path(ofile)
+        self.size = screen_size
+        self.filename = 'auto_GA_%d'%outanime_index+'.png'
+        self.fileindex = 'AMfile_%d'% file_index
+        self.label_color = label_color
+        file_index = file_index+1
+        outanime_index = outanime_index+1
 # a1.6.5 内建动画，这是一个Animation类的子类，重构了构造函数
 class BuiltInAnimation(Animation):
     def __init__(self,anime_type='hitpoint',anime_args=('0',0,0,0),screensize = (1920,1080),layer=0,label_color='Mango'):
@@ -342,7 +803,7 @@ class BuiltInAnimation(Animation):
             nametx_surf = test_canvas.crop((p1,p2,p3,p4))
             # 开始制图
             if layer==0: # 底层 阴影图
-                self.pos = ((screensize[0]-max(nx,total_heart))/2,(4/5*screensize[1]-hy-ny)/2)
+                self.pos = Pos((screensize[0]-max(nx,total_heart))/2,(4/5*screensize[1]-hy-ny)/2)
                 canvas = Image.new(size=(max(nx,total_heart),hy+ny+screensize[1]//5),mode='RGBA',color=(0,0,0,0))
                 self.size = canvas.size
                 if nx > total_heart:
@@ -362,7 +823,7 @@ class BuiltInAnimation(Animation):
                     left_heart_shape = heart_shape.crop((0,0,int(hx/2),hy))
                     canvas.paste(left_heart_shape,(total_heart-int(hx/2),posy))
             elif layer==1: # 剩余的血量
-                self.pos = ((screensize[0]-total_heart)/2,3/5*screensize[1]+ny/2-hy/2)
+                self.pos = Pos((screensize[0]-total_heart)/2,3/5*screensize[1]+ny/2-hy/2)
                 # 1.6.5 防止报错 剩余血量即使是空图，也要至少宽30pix
                 canvas = Image.new(size=(max(30,left_heart),hy),mode='RGBA',color=(0,0,0,0)) 
                 self.size = canvas.size
@@ -377,7 +838,7 @@ class BuiltInAnimation(Animation):
                     left_heart = heart.crop((0,0,int(hx/2),hy))
                     canvas.paste(left_heart,(heart_end//2*(hx + distance),0))
             elif layer==2: # 损失/恢复的血量
-                self.pos = (heart_end//2*(hx + distance)+(heart_end%2)*int(hx/2)+(screensize[0]-total_heart)/2,3/5*screensize[1]+ny/2-hy/2)
+                self.pos = Pos(heart_end//2*(hx + distance)+(heart_end%2)*int(hx/2)+(screensize[0]-total_heart)/2,3/5*screensize[1]+ny/2-hy/2)
                 canvas = Image.new(size=(lost_heart,hy),mode='RGBA',color=(0,0,0,0))
                 self.size = canvas.size
                 posx,posy = 0,0
@@ -400,11 +861,11 @@ class BuiltInAnimation(Animation):
             canvas.save(ofile)
 
             #剩下的需要定义的
+            self.media = canvas
             self.path = reformat_path(ofile) # 兼容动画Animation，只使用第一帧！
             self.filename = 'auto_BIA_%d'%outanime_index+'.png'
             self.fileindex = 'AMfile_%d'% file_index
-            #print(np.array(self.size),np.array(self.pos))
-            self.PRpos = PR_center_arg(np.array(self.size),np.array(self.pos))
+            # self.PRpos = PR_center_arg(np.array(self.size),np.array(self.pos.get()))
             outanime_index = outanime_index+1
             file_index = file_index+1
         if anime_type == 'dice':
@@ -454,16 +915,16 @@ class BuiltInAnimation(Animation):
                         check_surf = test_canvas.crop((p1,p2,p3,p4))
                         canvas.paste(check_surf,(int(0.7292*screensize[0]),y_anchor+i*y_unit+(y_unit-cy)//2)) # 0.7292*screensize[0] = 1400
                 self.size = screen_size
-                self.pos = (0,0)
+                self.pos = Pos(0,0)
             elif layer==1: #无法显示动态，留空白
                 canvas = Image.new(mode='RGBA',size=(int(0.1458*screensize[0]),y_unit*N_dice),color=(0,0,0,0))
                 self.size = (int(0.1458*screensize[0]),y_unit*N_dice)
-                self.pos = (int(0.5833*screensize[0]),y_anchor)
+                self.pos = Pos(int(0.5833*screensize[0]),y_anchor)
             elif layer==2:
                 dice_cmap={3:(124,191,85,255),1:(94,188,235,255),0:(245,192,90,255),2:(233,86,85,255),-1:(255,255,255,255)}
                 canvas = Image.new(mode='RGBA',size=(int(0.1458*screensize[0]),y_unit*N_dice),color=(0,0,0,0))
                 self.size = (int(0.1458*screensize[0]),y_unit*N_dice)
-                self.pos = (int(0.5833*screensize[0]),y_anchor)
+                self.pos = Pos(int(0.5833*screensize[0]),y_anchor)
                 for i,die in enumerate(anime_args): 
                     name_tx,dice_max,dice_check,dice_face = die
                     dice_max,dice_face,dice_check = map(lambda x:-1 if x=='NA' else int(x),(dice_max,dice_face,dice_check))
@@ -488,10 +949,11 @@ class BuiltInAnimation(Animation):
                 pass
             ofile = output_path+'/auto_BIA_%d'%outanime_index+'.png'
             canvas.save(ofile)
+            self.media = canvas
             self.path = reformat_path(ofile) # 兼容动画Animation，只使用第一帧！
             self.filename = 'auto_BIA_%d'%outanime_index+'.png'
             self.fileindex = 'AMfile_%d'% file_index
-            self.PRpos = PR_center_arg(np.array(self.size),np.array(self.pos))
+            # self.PRpos = PR_center_arg(np.array(self.size),np.array(self.pos.get()))
             outanime_index = outanime_index+1
             file_index = file_index+1
             
@@ -500,10 +962,14 @@ class Audio:
     def __init__(self,filepath,label_color='Caribbean'):
         global file_index 
         self.path = reformat_path(filepath)
-        self.length = get_audio_length(filepath)*frame_rate
         self.filename = self.path.split('/')[-1]
         self.fileindex = 'AUfile_%d'% file_index
         self.label_color = label_color
+        try:
+            self.length = self.get_length(filepath)*frame_rate
+        except Exception as E:
+            print(WarningPrint('BadAuLen',filepath,E))
+            self.length = 0
         file_index = file_index+1
         
     def display(self,begin):
@@ -524,39 +990,21 @@ class Audio:
                                               'colorlabel':self.label_color})
         clip_index = clip_index+1
         return clip_this
-    
+    def get_length(self,filepath):
+        mixer.init()
+        this_audio = mixer.Sound(filepath)
+        return this_audio.get_length()
     def convert(self):
         pass
 
 # 背景音乐
 class BGM:
     def __init__(self,filepath,volume=100,loop=True,label_color='Forest'):
-        print('[33m[warning]:[0m BGM '+filepath+' is automatically ignored, you should add BGM manually in Premiere Pro later.')
+        print(WarningPrint('BGMIgnore',filepath))
     def convert(self):
         pass
 
-# 异常定义
-
-class ParserError(Exception):
-    def __init__(self,*description):
-        self.description = ' '.join(map(str,description))
-    def __str__(self):
-        return self.description
-
-class MediaError(ParserError):
-    pass
-
 # 函数定义
-
-# 获取音频长度
-def get_audio_length(filepath):
-    mixer.init()
-    try:
-        this_audio = mixer.Sound(filepath)
-    except Exception as E:
-        print('[33m[warning]:[0m Unable to get audio length of '+str(filepath)+', due to:',E)
-        return np.nan
-    return this_audio.get_length()
 
 # 重格式化路径
 def reformat_path(path): # alpha 1.9.5 支持unix文件系统路径
@@ -580,15 +1028,18 @@ def reformat_path(path): # alpha 1.9.5 支持unix文件系统路径
     else:
         raise ValueError('invalid path type')
 
+# 优化导出PR clip的逻辑：是否一定要在小节断点处分段？不分段的话会怎样？
+
 # 处理bg 和 am 的parser
 def parse_timeline(layer):
     global timeline,break_point
+    break_at_breakpoint = ((layer[0:2]!='BG') & (layer[-1]!='S'))
     track = timeline[[layer]]
     clips = []
     item,begin,end = 'NA',0,0
     for key,values in track.iterrows():
-        #如果item变化了，或者进入了指定的断点
-        if (values[layer] != item) | (key in break_point.values): 
+        #如果item变化了，或者进入了指定的断点(仅断点分隔的图层)
+        if (values[layer] != item) | ((key in break_point.values) & break_at_breakpoint): 
             if (item == 'NA') | (item!=item): # 如果itme是空 
                 pass # 则不输出什么
             else:
@@ -610,12 +1061,13 @@ def parse_timeline(layer):
 # 处理Bb 的parser
 def parse_timeline_bubble(layer):
     global timeline,break_point
+    break_at_breakpoint = ((layer[0:2]!='BG') & (layer[-1]!='S'))
     track = timeline[[layer,layer+'_main',layer+'_header']]
     clips = []
     item,begin,end = 'NA',0,0
     for key,values in track.iterrows():
-        #如果item变化了，或者进入了指定的断点(这是保证断句的关键！)
-        if (values[layer] != item) | (key in break_point.values): 
+        #如果item变化了，或者进入了指定的断点(这是保证断句的关键！)(仅断点分隔的图层)
+        if (values[layer] != item) | ((key in break_point.values) & break_at_breakpoint): 
             if (item == 'NA') | (item!=item): # 如果itme是空 
                 pass # 则不输出什么
             else:
@@ -647,7 +1099,8 @@ def PR_center_arg(obj_size,pygame_pos):
 
 # 全局变量
 
-cmap = {'black':(0,0,0,255),'white':(255,255,255,255),'greenscreen':(0,177,64,255)}
+from Medias import cmap
+# cmap = {'black':(0,0,0,255),'white':(255,255,255,255),'greenscreen':(0,177,64,255)}
 Is_NTSC = str(frame_rate % 30 == 0)
 Audio_type = 'Stereo'
 stdin_name = stdin_log.replace('\\','/').split('/')[-1]
@@ -663,23 +1116,23 @@ audio_clip_tplt = open('./xml_templates/tplt_audio_clip.xml','r',encoding='utf8'
 
 # 载入timeline 和 breakpoint
 
-timeline = pd.read_pickle(stdin_log)
-break_point = pd.read_pickle(stdin_log.replace('timeline','breakpoint'))
-bulitin_media = pd.read_pickle(stdin_log.replace('timeline','bulitinmedia'))
+timeline_ifile = open(args.TimeLine,'rb')
+timeline,break_point,bulitin_media = pickle.load(timeline_ifile)
+timeline_ifile.close()
 
 def main():
     global media_list
-    print('[export XML]: Welcome to use exportXML for TRPG-replay-generator '+edtion)
-    print('[export XML]: The output xml file and refered png files will be saved at "'+output_path+'"')
+    print(PrxmlPrint('Welcome',EDITION))
+    print(PrxmlPrint('SaveAt',output_path))
 
     # 载入od文件
     try:
         object_define_text = open(media_obj,'r',encoding='utf-8').read()#.split('\n')
     except UnicodeDecodeError as E:
-        print('[31m[DecodeError]:[0m',E)
+        print(DecodeError('DecodeErr', E))
         sys.exit(1)
     if object_define_text[0] == '\ufeff': # 139 debug
-        print('[33m[warning]:[0m','UTF8 BOM recognized in MediaDef, it will be drop from the begin of file!')
+        print(WarningPrint('UFT8BOM'))
         object_define_text = object_define_text[1:]
     object_define_text = object_define_text.split('\n')
 
@@ -695,12 +1148,13 @@ def main():
                 obj_name = text.split('=')[0]
                 obj_name = obj_name.replace(' ','')
                 if obj_name in occupied_variable_name:
-                    raise SyntaxError('Obj name occupied')
+                    raise SyntaxsError('OccName')
                 elif (len(re.findall('\w+',obj_name))==0)|(obj_name[0].isdigit()):
-                    raise SyntaxError('Invalid Obj name')
+                    raise SyntaxsError('InvaName')
                 media_list.append(obj_name) #记录新增对象名称
             except Exception as E:
-                print('[31m[SyntaxError]:[0m "'+text+'" appeared in media define file line ' + str(i+1)+' is invalid syntax:',E)
+                print(E)
+                print(SyntaxsError('MediaDef',text,str(i+1)))
                 sys.exit(1)
     black = Background('black')
     white = Background('white')
@@ -713,11 +1167,12 @@ def main():
 
     # 开始生成
 
-    print('[export XML]: Begin to export.')
+    print(PrxmlPrint('ExpBegin'))
     video_tracks = []
     audio_tracks = []
     for layer in zorder + ['SE','Voice']:
-        if layer == 'Bb':
+        # 气泡图层
+        if layer[0:2] == 'Bb':
             track_items = parse_timeline_bubble(layer)
             bubble_clip_list = []
             text_clip_list = []
@@ -731,7 +1186,7 @@ def main():
                 text_clip_list.append(text_this)
             video_tracks.append(track_tplt.format(**{'targeted':'False','clips':'\n'.join(bubble_clip_list)}))
             video_tracks.append(track_tplt.format(**{'targeted':'True','clips':'\n'.join(text_clip_list)}))
-            
+        # 音效图层
         elif layer in ['SE','Voice']:
             track_items = parse_timeline(layer)
             clip_list = []
@@ -742,9 +1197,9 @@ def main():
                     temp = Audio(item[0][1:-1])
                     clip_list.append(temp.display(begin=item[1]))
                 else:
-                    print("[33m[warning]:[0m",'Audio file',item[0],'is not exist.')
+                    print(WarningPrint('BadAuFile',item[0]))
             audio_tracks.append(audio_track_tplt.format(**{'type':Audio_type,'clips':'\n'.join(clip_list)}))
-            
+        # 立绘或者背景图层
         else:
             track_items = parse_timeline(layer)
             clip_list = []
@@ -763,6 +1218,6 @@ def main():
     ofile = open(output_path+'/'+stdin_name+'.xml','w',encoding='utf-8')
     ofile.write(main_output)
     ofile.close()
-    print('[export XML]: Done! XML path : '+output_path+'/'+stdin_name+'.xml')
+    print(PrxmlPrint('Done',output_path+'/'+stdin_name+'.xml'))
 if __name__ == '__main__':
     main()
