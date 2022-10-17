@@ -73,7 +73,7 @@ class Application():
         self.load_configure()
 
         # 获取python解释器的路径
-        self.python3 = sys.executable.replace('\\', '/')
+        # self.python3 = sys.executable.replace('\\', '/')
         # python3 = 'python' # exe发布版
 
         # 创建组件
@@ -275,5 +275,7 @@ class Application():
 
 
 if __name__ == '__main__':
+    os.system("echo TRPG-Replay-Generator version 1.1.0 (17 Oct 2022)")
+    os.system("echo Copyright (c) 2022 DanDDXuanX         MIT License")
     app = Application()
     app.mainloop()
