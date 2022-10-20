@@ -1942,7 +1942,7 @@ elif args.Modules == 'speech_synthesizer':
                 import warnings
                 with warnings.catch_warnings():
                     warnings.simplefilter('ignore') # 禁用读取excel时报出的：UserWarning: Data Validation extension is not supported and will be removed
-                    charactor_table = pd.read_excel(args.CharacterTable,dtype = str,sheet_name='角色配置').fillna('NA') # 支持excel格式的角色配置表
+                    charactor_table = pd.read_excel(args.CharacterTable,dtype = str,sheet_name='角色配置') # 支持excel格式的角色配置表
             else:
                 charactor_table = pd.read_csv(args.CharacterTable,sep='\t',dtype = str)
             charactor_table.index = charactor_table['Name']+'.'+charactor_table['Subtype']
@@ -1965,6 +1965,9 @@ elif args.Modules == 'speech_synthesizer':
             charactor_table['PitchRate'] = 0
         else:
             charactor_table['PitchRate'] = charactor_table['PitchRate'].fillna(0).astype(int)
+        
+        # 最后再填补空缺值
+        charactor_table = charactor_table.fillna('NA')
 
         # 建立TTS_engine的代码
         TTS = pd.Series(index=charactor_table.index,dtype='str')
