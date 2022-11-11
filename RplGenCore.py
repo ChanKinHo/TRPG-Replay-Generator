@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
-from Utils import EDITION
+from core.Utils import EDITION
 
 import argparse
 import sys
