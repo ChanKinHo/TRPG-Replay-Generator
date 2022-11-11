@@ -43,10 +43,9 @@ args = ap.parse_args()
 
 if args.Modules == 'replay_generator':
     # 异常和运行日志
-    from Exceptions import RplGenError, Print
-    from Exceptions import ParserError, RenderError, ArgumentError, MediaError, SyntaxsError, SynthesisError, DecodeError
-    from Exceptions import MainPrint, WarningPrint, CMDPrint
-
+    from core.Exceptions import RplGenError, Print
+    from core.Exceptions import ParserError, RenderError, ArgumentError, MediaError, SyntaxsError, SynthesisError, DecodeError
+    from core.Exceptions import MainPrint, WarningPrint, CMDPrint
     Width,Height = args.Width,args.Height #显示的分辨率
     frame_rate = args.FramePerSecond #帧率 单位fps
     zorder = args.Zorder.split(',') #渲染图层顺序
@@ -110,37 +109,37 @@ if args.Modules == 'replay_generator':
     import pickle
 
     # 自由点
-    from FreePos import Pos,FreePos,PosGrid
+    from core.FreePos import Pos,FreePos,PosGrid
 
     # 类定义 alpha 1.11.0
-    from Medias import Text
-    from Medias import StrokeText
-    from Medias import Bubble
-    from Medias import Balloon
-    from Medias import DynamicBubble
-    from Medias import ChatWindow
-    from Medias import Background
-    from Medias import Animation
-    from Medias import GroupedAnimation
-    from Medias import BuiltInAnimation
-    from Medias import Audio
-    from Medias import BGM
+    from core.Medias import Text
+    from core.Medias import StrokeText
+    from core.Medias import Bubble
+    from core.Medias import Balloon
+    from core.Medias import DynamicBubble
+    from core.Medias import ChatWindow
+    from core.Medias import Background
+    from core.Medias import Animation
+    from core.Medias import GroupedAnimation
+    from core.Medias import BuiltInAnimation
+    from core.Medias import Audio
+    from core.Medias import BGM
     # 窗体参数
-    from Medias import screen_config
+    from core.Medias import screen_config
     screen_config['screen_size'] = (Width,Height)
     screen_config['frame_rate'] = frame_rate
     # 色图
-    from Medias import cmap
+    from core.Medias import cmap
 
     # 正则表达式
-    from Regexs import *
+    from core.Regexs import *
 
     # 曲线函数
-    from Formulas import linear,quadratic,quadraticR,sigmoid,right,left,sincurve,normalized
-    from Formulas import formula_available
+    from core.Formulas import linear,quadratic,quadraticR,sigmoid,right,left,sincurve,normalized
+    from core.Formulas import formula_available
 
     # 小工具们
-    from Utils import *
+    from core.Utils import *
 
     # python的绝对路径
     # python3 = sys.executable.replace('\\','/')
@@ -674,7 +673,7 @@ if args.Modules == 'replay_generator':
                 this_duration = len(last_placed_index)
                 this_am,am_method,am_dur,am_center = this_placed_animation
                 # 如果place的this_duration小于切换时间，则清除动态切换效果
-                if this_duration<(2*am_dur+1) & (this_am != 'NA'):
+                if (this_duration<(2*am_dur+1)) & (this_am != 'NA'):
                     print(WarningPrint('PAmMetDrop'))
                     am_dur = 0
                     am_method = 'replace'
@@ -741,7 +740,7 @@ if args.Modules == 'replay_generator':
                 # bb,method,method_dur,HT,MT,text_method,tx_dur,center
                 this_bb,bb_method,bb_dur,this_hd,this_tx,text_method,text_dur,bb_center = this_placed_bubble
                 # 如果place的this_duration小于切换时间，则清除动态切换效果
-                if this_duration<(2*bb_dur+1) & (this_bb != 'NA'):
+                if (this_duration<(2*bb_dur+1)) & (this_bb != 'NA'):
                     print(WarningPrint('PBbMetDrop'))
                     bb_dur = 0
                     bb_method = 'replace'
@@ -1078,7 +1077,7 @@ if args.Modules == 'replay_generator':
             this_duration = len(last_placed_index)
             this_am,am_method,am_dur,am_center = this_placed_animation
             # 如果place的this_duration小于切换时间，则清除动态切换效果
-            if this_duration<(2*am_dur+1) & (this_am != 'NA'):
+            if (this_duration<(2*am_dur+1)) & (this_am != 'NA'):
                 print(WarningPrint('PAmMetDrop'))
                 am_dur = 0
                 am_method = 'replace'
@@ -1102,7 +1101,7 @@ if args.Modules == 'replay_generator':
             # bb,method,method_dur,HT,MT,text_method,tx_dur,center
             this_bb,bb_method,bb_dur,this_hd,this_tx,text_method,text_dur,bb_center = this_placed_bubble
             # 如果place的this_duration小于切换时间，则清除动态切换效果
-            if this_duration<(2*bb_dur+1) & (this_bb != 'NA'):
+            if (this_duration<(2*bb_dur+1)) & (this_bb != 'NA'):
                 print(WarningPrint('PBbMetDrop'))
                 bb_dur = 0
                 bb_method = 'replace'
@@ -1555,9 +1554,9 @@ if args.Modules == 'replay_generator':
     system_terminated('End')
 
 elif args.Modules == 'speech_synthesizer':
-    from Exceptions import RplGenError, Print
-    from Exceptions import DecodeError, IgnoreInput, MediaError, ArgumentError, ParserError, SyntaxsError, SynthesisError
-    from Exceptions import SynthPrint, WarningPrint
+    from core.Exceptions import RplGenError, Print
+    from core.Exceptions import DecodeError, IgnoreInput, MediaError, ArgumentError, ParserError, SyntaxsError, SynthesisError
+    from core.Exceptions import SynthPrint, WarningPrint
 
     # 初始化日志打印
     if args.Language == 'zh':
@@ -1611,7 +1610,7 @@ elif args.Modules == 'speech_synthesizer':
     from tkinter import filedialog
 
     # 语音合成服务
-    from TTSengines import Aliyun_TTS_engine,Azure_TTS_engine,voice_lib
+    from core.TTSengines import Aliyun_TTS_engine,Azure_TTS_engine,voice_lib
 
     Aliyun_TTS_engine.AKID = args.AccessKey
     Aliyun_TTS_engine.AKKEY = args.AccessKeySecret
@@ -1620,11 +1619,11 @@ elif args.Modules == 'speech_synthesizer':
     Azure_TTS_engine.service_region = args.ServRegion
 
     # 从主程序借来的Audio类
-    from Medias import Audio
+    from core.Medias import Audio
     # 正则表达式定义
-    from Regexs import RE_dialogue,RE_characor,RE_asterisk
+    from core.Regexs import RE_dialogue,RE_characor,RE_asterisk
     # 函数定义
-    from Utils import clean_ts,isnumber,mod62_timestamp
+    from core.Utils import clean_ts,isnumber,mod62_timestamp
 
     # 全局变量
     media_list=[]
@@ -1965,8 +1964,7 @@ elif args.Modules == 'speech_synthesizer':
             charactor_table['PitchRate'] = 0
         else:
             charactor_table['PitchRate'] = charactor_table['PitchRate'].fillna(0).astype(int)
-        
-        # 最后再填补空缺值
+        # 填补剩余空缺值
         charactor_table = charactor_table.fillna('NA')
 
         # 建立TTS_engine的代码
@@ -2114,9 +2112,9 @@ elif args.Modules == 'speech_synthesizer':
             main()
 
 elif args.Modules == 'export_xml':
-    from Exceptions import RplGenError, Print
-    from Exceptions import ArgumentError, DecodeError, MediaError, SyntaxsError
-    from Exceptions import PrxmlPrint, WarningPrint
+    from core.Exceptions import RplGenError, Print
+    from core.Exceptions import ArgumentError, DecodeError, MediaError, SyntaxsError
+    from core.Exceptions import PrxmlPrint, WarningPrint
     media_obj = args.MediaObjDefine #媒体对象定义文件的路径
     char_tab = args.CharacterTable #角色和媒体对象的对应关系文件的路径
     stdin_log = args.TimeLine #log路径
@@ -2176,7 +2174,7 @@ elif args.Modules == 'export_xml':
     import glob # 匹配路径
     import pickle
 
-    from FreePos import Pos,FreePos,PosGrid
+    from core.FreePos import Pos,FreePos,PosGrid
 
     # 文字对象
 
@@ -2207,7 +2205,8 @@ elif args.Modules == 'export_xml':
                 for tx in text_line:
                     out_text.append(self.render(tx))
             elif len(text) > self.line_limit: #如果既没有主动指定，字符长度也超限
-                for i in range(0,len(text)//self.line_limit+1):
+                ceil_div = lambda x,y: -(-x//y)
+                for i in range(0,ceil_div(len(text),self.line_limit)):
                     out_text.append(self.render(text[i*self.line_limit:(i+1)*self.line_limit]))
             else:
                 out_text = [self.render(text)]
@@ -2216,16 +2215,31 @@ elif args.Modules == 'export_xml':
             pass
 
     class StrokeText(Text):
-        def __init__(self,fontfile='./media/SourceHanSansCN-Regular.otf',fontsize=40,color=(0,0,0,255),line_limit=20,edge_color=(255,255,255,255),label_color='Lavender'):
+        def __init__(self,fontfile='./media/SourceHanSansCN-Regular.otf',fontsize=40,color=(0,0,0,255),line_limit=20,edge_color=(255,255,255,255),edge_width=1,label_color='Lavender'):
             super().__init__(fontfile=fontfile,fontsize=fontsize,color=color,line_limit=line_limit,label_color=label_color) # 继承
             self.edge_color=edge_color
+            try:
+                self.edge_width = int(edge_width)
+            except ValueError:
+                raise MediaError("InvEgWd",edge_width)
+            if self.edge_width < 0:
+                raise MediaError("InvEgWd",edge_width)
+            elif self.edge_width > 3:
+                print(WarningPrint('WideEdge'))
         def render(self,tx):
+            ew = self.edge_width
             font_this = ImageFont.truetype(self.fontpath, self.size)
-            text_this = Image.new(mode='RGBA',size=(self.size*int(len(tx)*1.5),self.size*2),color=(0,0,0,0)) # 画布贪婪为2x高度，1.5*宽度
+            text_this = Image.new(mode='RGBA',size=(self.size*int(len(tx)*1.5)+2*ew,self.size*2+2*ew),color=(0,0,0,0)) # 画布贪婪为2x高度，1.5*宽度
             draw_this = ImageDraw.Draw(text_this)
-            for pos in [(0,0),(0,1),(0,2),(1,0),(1,2),(2,0),(2,1),(2,2)]:
+            # 角
+            for pos in [[0,0],[0,2*ew],[2*ew,0],[2*ew,2*ew]]:
                 draw_this.text(pos,tx,font = font_this,align ="left",fill = self.edge_color)
-            draw_this.text((1,1),tx,font = font_this,align ="left",fill = self.color)
+            # 边
+            for i in range(1,ew*2):
+                for pos in [[0,i],[i,0],[2*ew,i],[i,2*ew]]:
+                    draw_this.text(pos,tx,font = font_this,align ="left",fill = self.edge_color)
+            # 中心
+            draw_this.text((ew,ew),tx,font = font_this,align ="left",fill = self.color)
             return text_this
 
         # 对话框、气泡、文本框
@@ -3187,7 +3201,7 @@ elif args.Modules == 'export_xml':
 
     # 全局变量
 
-    from Medias import cmap
+    from core.Medias import cmap
     # cmap = {'black':(0,0,0,255),'white':(255,255,255,255),'greenscreen':(0,177,64,255)}
     Is_NTSC = str(frame_rate % 30 == 0)
     Audio_type = 'Stereo'
@@ -3311,9 +3325,9 @@ elif args.Modules == 'export_xml':
         main()
 
 elif args.Modules == 'export_video':
-    from Exceptions import RplGenError, Print
-    from Exceptions import ArgumentError, DecodeError, MediaError, RenderError, SyntaxsError
-    from Exceptions import VideoPrint, WarningPrint
+    from core.Exceptions import RplGenError, Print
+    from core.Exceptions import ArgumentError, DecodeError, MediaError, RenderError, SyntaxsError
+    from core.Exceptions import VideoPrint, WarningPrint
     Width = args.Width #显示的分辨率
     Height = args.Height
     frame_rate = args.FramePerSecond #帧率 单位fps
@@ -3370,26 +3384,26 @@ elif args.Modules == 'export_video':
     import pickle
 
     # 自由点
-    from FreePos import Pos,FreePos,PosGrid
+    from core.FreePos import Pos,FreePos,PosGrid
 
     # 类定义 alpha 1.11.0
 
-    from Medias import Text
-    from Medias import StrokeText
-    from Medias import Bubble
-    from Medias import Balloon
-    from Medias import DynamicBubble
-    from Medias import ChatWindow
-    from Medias import Background
-    from Medias import Animation
-    from Medias import GroupedAnimation
-    from Medias import BuiltInAnimation
-    from Medias import screen_config
+    from core.Medias import Text
+    from core.Medias import StrokeText
+    from core.Medias import Bubble
+    from core.Medias import Balloon
+    from core.Medias import DynamicBubble
+    from core.Medias import ChatWindow
+    from core.Medias import Background
+    from core.Medias import Animation
+    from core.Medias import GroupedAnimation
+    from core.Medias import BuiltInAnimation
+    from core.Medias import screen_config
     screen_config['screen_size'] = (Width,Height)
     screen_config['frame_rate'] = frame_rate
 
-    from Medias import Audio_Video as Audio
-    from Medias import BGM_Video as BGM
+    from core.Medias import Audio_Video as Audio
+    from core.Medias import BGM_Video as BGM
 
     # 处理bg 和 am 的parser
     def parse_timeline(layer):
