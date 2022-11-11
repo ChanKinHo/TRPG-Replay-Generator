@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 # coding: utf-8
-from Utils import EDITION
+from core.Utils import EDITION
 
 # 异常定义
 
-from Exceptions import RplGenError, Print
-from Exceptions import ArgumentError, DecodeError, MediaError, SyntaxsError
-from Exceptions import PrxmlPrint, WarningPrint
+from core.Exceptions import RplGenError, Print
+from core.Exceptions import ArgumentError, DecodeError, MediaError, SyntaxsError
+from core.Exceptions import PrxmlPrint, WarningPrint
 
 # 外部参数输入
 
@@ -88,7 +88,7 @@ from pygame import mixer
 import glob # 匹配路径
 import pickle
 
-from FreePos import Pos,FreePos,PosGrid
+from core.FreePos import Pos,FreePos,PosGrid
 
 # 文字对象
 
@@ -119,7 +119,8 @@ class Text:
             for tx in text_line:
                 out_text.append(self.render(tx))
         elif len(text) > self.line_limit: #如果既没有主动指定，字符长度也超限
-            for i in range(0,len(text)//self.line_limit+1):
+            ceil_div = lambda x,y: -(-x//y)
+            for i in range(0,ceil_div(len(text),self.line_limit)):
                 out_text.append(self.render(text[i*self.line_limit:(i+1)*self.line_limit]))
         else:
             out_text = [self.render(text)]
@@ -128,16 +129,31 @@ class Text:
         pass
 
 class StrokeText(Text):
-    def __init__(self,fontfile='./media/SourceHanSansCN-Regular.otf',fontsize=40,color=(0,0,0,255),line_limit=20,edge_color=(255,255,255,255),label_color='Lavender'):
+    def __init__(self,fontfile='./media/SourceHanSansCN-Regular.otf',fontsize=40,color=(0,0,0,255),line_limit=20,edge_color=(255,255,255,255),edge_width=1,label_color='Lavender'):
         super().__init__(fontfile=fontfile,fontsize=fontsize,color=color,line_limit=line_limit,label_color=label_color) # 继承
         self.edge_color=edge_color
+        try:
+            self.edge_width = int(edge_width)
+        except ValueError:
+            raise MediaError("InvEgWd",edge_width)
+        if self.edge_width < 0:
+            raise MediaError("InvEgWd",edge_width)
+        elif self.edge_width > 3:
+            print(WarningPrint('WideEdge'))
     def render(self,tx):
+        ew = self.edge_width
         font_this = ImageFont.truetype(self.fontpath, self.size)
-        text_this = Image.new(mode='RGBA',size=(self.size*int(len(tx)*1.5),self.size*2),color=(0,0,0,0)) # 画布贪婪为2x高度，1.5*宽度
+        text_this = Image.new(mode='RGBA',size=(self.size*int(len(tx)*1.5)+2*ew,self.size*2+2*ew),color=(0,0,0,0)) # 画布贪婪为2x高度，1.5*宽度
         draw_this = ImageDraw.Draw(text_this)
-        for pos in [(0,0),(0,1),(0,2),(1,0),(1,2),(2,0),(2,1),(2,2)]:
+        # 角
+        for pos in [[0,0],[0,2*ew],[2*ew,0],[2*ew,2*ew]]:
             draw_this.text(pos,tx,font = font_this,align ="left",fill = self.edge_color)
-        draw_this.text((1,1),tx,font = font_this,align ="left",fill = self.color)
+        # 边
+        for i in range(1,ew*2):
+            for pos in [[0,i],[i,0],[2*ew,i],[i,2*ew]]:
+                draw_this.text(pos,tx,font = font_this,align ="left",fill = self.edge_color)
+        # 中心
+        draw_this.text((ew,ew),tx,font = font_this,align ="left",fill = self.color)
         return text_this
 
     # 对话框、气泡、文本框
@@ -1099,7 +1115,7 @@ def PR_center_arg(obj_size,pygame_pos):
 
 # 全局变量
 
-from Medias import cmap
+from core.Medias import cmap
 # cmap = {'black':(0,0,0,255),'white':(255,255,255,255),'greenscreen':(0,177,64,255)}
 Is_NTSC = str(frame_rate % 30 == 0)
 Audio_type = 'Stereo'
