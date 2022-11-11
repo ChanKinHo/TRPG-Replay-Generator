@@ -4,8 +4,8 @@
 block_cipher = None
 
 
-a = Analysis(['gui_exec\\Application.py'],
-             pathex=['D:\\GitHub\\TRPG-Replay-Generator\\gui_exec'],
+a = Analysis(['gui\\Application.py'],
+             pathex=['D:\\GitHub\\TRPG-Replay-Generator\\gui'],
              binaries=[],
              datas=[],
              hiddenimports=[],
