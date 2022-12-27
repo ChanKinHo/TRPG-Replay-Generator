@@ -5,27 +5,45 @@
 
 import numpy as np
 import pygame
-import glob # 匹配路径
 import pydub
 
+from .FilePaths import Filepath
 from .FreePos import Pos,FreePos
 from .Exceptions import MediaError, WarningPrint
 from .Formulas import sigmoid
 
-screen_config = {
-    'screen_size' : (1920,1080),
-    'frame_rate' : 30,
-}
-
-cmap = {'black':(0,0,0,255),'white':(255,255,255,255),'greenscreen':(0,177,64,255),'notetext':(118,185,0,255)}
-
 # 主程序 replay_generator
-
+# 媒体对象，所有媒体类的基类
+class MediaObj:
+    # 工程分辨率
+    screen_size = (1920,1080)
+    # 工程帧率
+    frame_rate = 30
+    # 色图
+    cmap = {
+        'black':(0,0,0,255),'white':(255,255,255,255),
+        'greenscreen':(0,177,64,255),
+        'notetext':(118,185,0,255),'empty':(0,0,0,0)
+        }
+    # 初始化
+    def __init__(self,filepath:str,label_color:str) -> None:
+        # 文件路径是非法关键字
+        if (filepath is None) or (filepath == 'None') or (filepath in self.cmap.keys()):
+            self.filepath = None
+        # 否则是一个Filepath 对象
+        else:
+            self.filepath = Filepath(filepath=filepath)
+        # 标签颜色
+        self.label_color = label_color
+    # 转换媒体，仅图像媒体类需要
+    def convert(self):
+        pass
 # 文字对象
-class Text:
+class Text(MediaObj):
     pygame.font.init()
     def __init__(self,fontfile='./media/SourceHanSansCN-Regular.otf',fontsize=40,color=(0,0,0,255),line_limit=20,label_color='Lavender'):
-        self.text_render = pygame.font.Font(fontfile,fontsize)
+        super().__init__(filepath=fontfile,label_color=label_color)
+        self.text_render = pygame.font.Font(self.filepath.exact(),fontsize)
         self.color=color
         self.size=fontsize
         self.line_limit = line_limit
@@ -51,10 +69,7 @@ class Text:
         else:
             out_text = [self.render(text)]
         return out_text
-    def convert(self):
-        pass
-
-# 描边文本，是Text的子类。注意，使用这个媒体类可能会影响帧率！
+# 描边文本
 class StrokeText(Text):
     pygame.font.init()
     def __init__(self,fontfile='./media/SourceHanSansCN-Regular.otf',fontsize=40,color=(0,0,0,255),line_limit=20,edge_color=(255,255,255,255),edge_width=1,label_color='Lavender'):
@@ -91,27 +106,30 @@ class StrokeText(Text):
             min_alpha = min(self.color[3],self.edge_color[3])
             canvas.set_alpha(min_alpha)
         return canvas
-
-# 对话框、气泡、文本框
-class Bubble:
+# 气泡
+class Bubble(MediaObj):                                   
     # 初始化
     def __init__(self,filepath=None,Main_Text=Text(),Header_Text=None,pos=(0,0),mt_pos=(0,0),ht_pos=(0,0),ht_target='Name',align='left',line_distance=1.5,label_color='Lavender'):
-        if filepath is None or filepath == 'None': # 支持气泡图缺省
+        # 媒体和路径
+        super().__init__(filepath=filepath,label_color=label_color)
+        if self.filepath is None:
             # 媒体设为空图
-            screen_size = screen_config['screen_size']
-            self.media = pygame.Surface(screen_size,pygame.SRCALPHA)
-            self.media.fill((0,0,0,0))
+            self.media = pygame.Surface(self.screen_size,pygame.SRCALPHA)
+            self.media.fill(self.cmap['empty'])
         else:
-            self.media = pygame.image.load(filepath)
+            self.media = pygame.image.load(self.filepath.exact())
+        # 位置
         if type(pos) in [Pos,FreePos]:
             self.pos = pos
         else:
             self.pos = Pos(*pos)
+        # 主文本和头文本
         self.MainText = Main_Text
         self.mt_pos = mt_pos # 只可以是tuple
         self.Header = Header_Text
         self.ht_pos = ht_pos # 只可以是tuple or list tuple
         self.target = ht_target
+        # 主文本行距
         if line_distance >= 1:
             self.line_distance = line_distance
         elif line_distance > 0:
@@ -119,6 +137,7 @@ class Bubble:
             print(WarningPrint('LineDist'))
         else:
             raise MediaError('ILineDist',line_distance)
+        # 主文本对齐
         if align in ('left','center'):
             self.align = align
         else:
@@ -157,8 +176,7 @@ class Bubble:
     # 转换媒体对象
     def convert(self):
         self.media = self.media.convert_alpha()
-
-# 多头文本框，气球
+# 气球
 class Balloon(Bubble):
     def __init__(self,filepath=None,Main_Text=Text(),Header_Text=[None],pos=(0,0),mt_pos=(0,0),ht_pos=[(0,0)],ht_target=['Name'],align='left',line_distance=1.5,label_color='Lavender'):
         super().__init__(filepath=filepath,Main_Text=Main_Text,Header_Text=Header_Text,pos=pos,mt_pos=mt_pos,ht_pos=ht_pos,ht_target=ht_target,align=align,line_distance=line_distance,label_color=label_color)
@@ -186,8 +204,7 @@ class Balloon(Bubble):
                 word_w,word_h = s.get_size()
                 temp.blit(s,(x+(self.MainText.size*self.MainText.line_limit - word_w)//2,y+i*self.MainText.size*self.line_distance))
         return temp,temp.get_size()
-
-# 尺寸自适应气泡
+# 自适应气泡
 class DynamicBubble(Bubble):
     def __init__(self,filepath=None,Main_Text=Text(),Header_Text=None,pos=(0,0),mt_pos=(0,0),mt_end=(0,0),ht_pos=(0,0),ht_target='Name',fill_mode='stretch',line_distance=1.5,label_color='Lavender'):
         # align 只能为left
@@ -303,25 +320,25 @@ class DynamicBubble(Bubble):
     def convert(self): # 和Animation类相同的convert
         super().convert()
         self.bubble_clip = np.frompyfunc(lambda x:x.convert_alpha(),1,1)(self.bubble_clip)
-
 # 聊天窗
 class ChatWindow(Bubble):
     def __init__(self,filepath=None,sub_key=['Key1'],sub_Bubble=[Bubble()],sub_Anime=[],sub_align=['left'],pos=(0,0),sub_pos=(0,0),sub_end=(0,0),am_left=0,am_right=0,sub_distance=50,label_color='Lavender'):
-        # 检查子气泡和key是否是能匹配
-        if len(sub_Bubble) != len(sub_key):
-            raise MediaError('CWKeyLen')
-        # 空白底图
-        if filepath is None or filepath == 'None': # 支持气泡图缺省
+        # 媒体和路径
+        MediaObj.__init__(self,filepath=filepath,label_color=label_color)
+        if self.filepath is None: # 支持气泡图缺省
             # 媒体设为空图
-            screen_size = screen_config['screen_size']
-            self.media = pygame.Surface(screen_size,pygame.SRCALPHA)
-            self.media.fill((0,0,0,0))
+            self.media = pygame.Surface(self.screen_size,pygame.SRCALPHA)
+            self.media.fill(self.cmap['empty'])
         else:
-            self.media = pygame.image.load(filepath)
+            self.media = pygame.image.load(self.filepath.exact())
+        # 位置
         if type(pos) in [Pos,FreePos]:
             self.pos = pos
         else:
             self.pos = Pos(*pos)
+        # 检查子气泡和key是否是能匹配
+        if len(sub_Bubble) != len(sub_key):
+            raise MediaError('CWKeyLen')
         # 子气泡和对齐
         self.sub_Bubble = {}
         self.sub_Anime = {}
@@ -443,16 +460,17 @@ class ChatWindow(Bubble):
         temp.blit(sub_surface,self.sub_pos)
         temp.blit(sub_groupam,(self.am_left,self.sub_pos[1]))
         return temp,temp.get_size()
-
-# 背景图片
-class Background:
+# 背景
+class Background(MediaObj):
     def __init__(self,filepath,pos = (0,0),label_color='Lavender'):
-        if filepath in cmap.keys(): #添加了，对纯色定义的背景的支持
-            screen_size = screen_config['screen_size']
-            self.media = pygame.Surface(screen_size)
-            self.media.fill(cmap[filepath])
+        # 文件和路径
+        super().__init__(filepath=filepath,label_color=label_color)
+        if filepath in self.cmap.keys():
+            self.media = pygame.Surface(self.screen_size)
+            self.media.fill(self.cmap[filepath])
         else:
-            self.media = pygame.image.load(filepath)
+            self.media = pygame.image.load(self.filepath.exact())
+        # 位置
         if type(pos) in [Pos,FreePos]:
             self.pos = pos
         else:
@@ -474,19 +492,19 @@ class Background:
             surface.blit(self.media,render_pos.get())
     def convert(self):
         self.media = self.media.convert_alpha()
-
-# 这个是真的动画了，用法和旧版的amination是一样的！
-class Animation:
+# 立绘
+class Animation(MediaObj):
     def __init__(self,filepath,pos = (0,0),tick=1,loop=True,label_color='Lavender'):
-        file_list = np.frompyfunc(lambda x:x.replace('\\','/'),1,1)(glob.glob(filepath))
-        self.length = len(file_list)
-        if self.length == 0:
-            raise MediaError('FileNFound',filepath)
-        self.media = np.frompyfunc(pygame.image.load,1,1)(file_list)
+        # 文件和路径
+        super().__init__(filepath=filepath,label_color=label_color)
+        self.length = len(self.filepath.list())
+        # self.media -> np.ndarray(Surface)
+        self.media:np.ndarray = np.frompyfunc(pygame.image.load,1,1)(self.filepath.list())
         if type(pos) in [Pos,FreePos]:
             self.pos = pos
         else:
             self.pos = Pos(*pos)
+        # 动画循环参数
         self.loop = loop
         self.this = 0
         self.tick = tick
@@ -515,14 +533,12 @@ class Animation:
         return tick_lineline
     def convert(self):
         self.media = np.frompyfunc(lambda x:x.convert_alpha(),1,1)(self.media)
-
-# a 1.13.5 组合立绘，Animation类的子类，组合立绘只能是静态立绘！
+# 组合立绘
 class GroupedAnimation(Animation):
     def __init__(self,subanimation_list,subanimation_current_pos=None,label_color='Mango'):
         # 新建画板，尺寸为全屏
-        screen_size = screen_config['screen_size']
-        canvas_surface = pygame.Surface(screen_size,pygame.SRCALPHA)
-        canvas_surface.fill((0,0,0,0))
+        canvas_surface = pygame.Surface(self.screen_size,pygame.SRCALPHA)
+        canvas_surface.fill(self.cmap['empty'])
         # 如果外部未指定位置参数，则使用子Animation类的自身的pos
         if subanimation_current_pos is None:
             subanimation_current_pos = [None]*len(subanimation_list)
@@ -561,12 +577,13 @@ class GroupedAnimation(Animation):
         self.loop = 0
         self.this = 0
         self.tick = 1
-
-# a1.7.5 内建动画，Animation类的子类
+        self.label_color = label_color
+# 内建动画
 class BuiltInAnimation(Animation):
     def __init__(self,anime_type='hitpoint',anime_args=('0',0,0,0),screensize = (1920,1080),layer=0,label_color='Mango'):
         BIA_text = Text('./media/SourceHanSerifSC-Heavy.otf',fontsize=int(0.0521*screensize[0]),color=(255,255,255,255),line_limit=10)
-        frame_rate = screen_config['frame_rate']
+        frame_rate = self.frame_rate
+        self.label_color = label_color
         if anime_type == 'hitpoint': # anime_args=('0',0,0,0)
             # 载入图片
             heart = pygame.image.load('./media/heart.png')
@@ -787,13 +804,14 @@ class BuiltInAnimation(Animation):
                 pass
             self.this = 0
             self.length=len(self.media)
-
 # 音效
-class Audio:
+class Audio(MediaObj):
     pygame.mixer.init()
     def __init__(self,filepath,label_color='Caribbean'):
+        # 文件路径
+        super().__init__(filepath=filepath,label_color=label_color)
         try:
-            self.media = pygame.mixer.Sound(filepath)
+            self.media = pygame.mixer.Sound(self.filepath.exact())
         except Exception as E:
             raise MediaError('BadAudio',filepath)
     def display(self,channel,volume=100):
@@ -801,19 +819,18 @@ class Audio:
         channel.play(self.media)
     def get_length(self):
         return self.media.get_length()
-    def convert(self):
-        pass
-
 # 背景音乐
-class BGM:
+class BGM(MediaObj):
     def __init__(self,filepath,volume=100,loop=True,label_color='Caribbean'):
-        self.media = filepath
+        # 文件路径
+        super().__init__(filepath=filepath,label_color=label_color)
+        self.media = self.filepath.exact()
         self.volume = volume/100
         if loop == True:
             self.loop = -1 #大概是不可能能放完的
         else:
             self.loop = 0
-        if filepath.split('.')[-1] not in ['ogg']: #建议的格式
+        if self.filepath.type() not in ['ogg']:#建议的格式
             print(WarningPrint('BadBGMFmt',filepath.split('.')[-1]))
     def display(self):
         if pygame.mixer.music.get_busy() == True: #如果已经在播了
@@ -824,22 +841,16 @@ class BGM:
         pygame.mixer.music.load(self.media) #进碟
         pygame.mixer.music.play(loops=self.loop) #开始播放
         pygame.mixer.music.set_volume(self.volume) #设置音量
-    def convert(self):
-        pass
 
 # 导出视频模块 export video
-
 # 音效
-class Audio_Video:
+class Audio_Video(MediaObj):
     def __init__(self,filepath,label_color='Caribbean'):
-        self.media = pydub.AudioSegment.from_file(filepath)
-    def convert(self):
-        pass
-
+        super().__init__(filepath=filepath,label_color=label_color)
+        self.media = pydub.AudioSegment.from_file(self.filepath.exact())
 # 背景音乐
-class BGM_Video:
+class BGM_Video(MediaObj):
     def __init__(self,filepath,volume=100,loop=True,label_color='Caribbean'):
-        self.media = pydub.AudioSegment.from_file(filepath) + np.log10(volume/100) * 20 # 调整音量
+        super().__init__(filepath=filepath,label_color=label_color)
+        self.media = pydub.AudioSegment.from_file(self.filepath.exact()) + np.log10(volume/100) * 20 # 调整音量
         self.loop = loop
-    def convert(self):
-        pass

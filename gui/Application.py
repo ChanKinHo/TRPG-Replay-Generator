@@ -75,12 +75,13 @@ class Application():
         # 获取解释器的路径
         python3 = sys.executable.replace('\\', '/')
         if python3.split('/')[-1] in ['py','py3','python','python3','python.exe','python3.exe']:
-            self.python3 = python3 + ' ./{}.py'
+            # self.python3 = python3 + ' ./{}.py'
+            self.python3 = python3 + ' ./RplGenCore.py' +  ' --Modules {}'
         else:
             if sys.platform == 'win32':
-                self.python3 = 'RplGenCore.exe --Modules {}'
+                self.python3 = './RplGenCore.exe --Modules {}'
             else:
-                self.python3 = 'RplGenCore --Modules {}'
+                self.python3 = './RplGenCore --Modules {}'
 
         # 创建组件
         self.create_widgets()
@@ -281,7 +282,5 @@ class Application():
 
 
 if __name__ == '__main__':
-    os.system("echo TRPG-Replay-Generator version 1.1.1 (11 Nov 2022)")
-    os.system("echo Copyright (c) 2022 DanDDXuanX         MIT License")
     app = Application()
     app.mainloop()

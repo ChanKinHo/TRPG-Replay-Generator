@@ -145,6 +145,10 @@ class ParserError(RplGenError):
                         "星标语音文件 '{}' 并不存在！"],
         'InvAster'    :["Invalid asterisk label appeared in dialogue line.",
                         "无效的星标语音框出现在对话行中！"],
+        'ParErrWait'  :["Parse exception occurred in wait line {}.",
+                        "解析异常发生在第{}行（暂停行）。"],
+        'InvWaitArg'  :["Invalid argument for command <wait>: {}.",
+                        "在 <wait> 命令中指定了非法的参数：{}"],
     }
     error_type = ["\x1B[31m[ParserError]:\x1B[0m ",
                   "\x1B[31m[解析错误]:\x1B[0m "]
@@ -232,8 +236,8 @@ class MediaError(RplGenError):
                         "关键字“{}”对应的子气泡是气球对象，无法在聊天窗中作为子气泡！"],
         'DA2CW'       :["Dynamic Animations is not supported as sub-animations for ChatWindow!",
                         "动态立绘对象无法在聊天窗中作为子头像！"],
-        'FileNFound'  :["Cannot find file match {}",
-                        "“{}”无法匹配到任何文件！"],
+        'FileNFound'  :["Cannot find file match '{}'",
+                        "'{}' 无法匹配到任何文件！"],
         'GAPrame'     :["length of subanimation params does not match!",
                         "子立绘对象和归零位置长度不匹配。"],
         'Undef2GA'    :["The Animation '{}' is not defined, which was tried to group into GroupedAnimation!",
