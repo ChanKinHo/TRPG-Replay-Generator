@@ -79,7 +79,7 @@ class Application():
             self.python3 = python3 + ' ./RplGenCore.py' +  ' --Modules {}'
         else:
             if sys.platform == 'win32':
-                self.python3 = './RplGenCore.exe --Modules {}'
+                self.python3 = 'RplGenCore.exe --Modules {}'
             else:
                 self.python3 = './RplGenCore --Modules {}'
 
@@ -282,5 +282,7 @@ class Application():
 
 
 if __name__ == '__main__':
+    os.system("echo TRPG-Replay-Generator version 1.1.2 (27 Dec 2022)")
+    os.system("echo Copyright (c) 2022 DanDDXuanX         MIT License")
     app = Application()
     app.mainloop()
